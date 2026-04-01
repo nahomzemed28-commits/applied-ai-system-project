@@ -40,7 +40,7 @@ with st.sidebar:
 
     st.divider()
 
-    total_tasks = sum(len(p.tasks) for p in owner.owned_pets)
+    total_tasks = len(scheduler.get_todays_schedule())
     pending_count = len(scheduler.get_pending_tasks())
     conflict_count = len(scheduler.detect_conflicts())
 
