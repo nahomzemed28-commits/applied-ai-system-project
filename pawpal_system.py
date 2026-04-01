@@ -1,22 +1,35 @@
-"""PawPal+ core business logic: Task, Pet, Owner, and Scheduler classes."""
+"""PawPal+ core business logic: Task, Pet, Owner, Scheduler, ConflictWarning."""
 
+import json
 from datetime import date, timedelta
 from collections import defaultdict
+from pathlib import Path
+
+# ── Priority constants ────────────────────────────────────────────────────────
+PRIORITY_HIGH   = "high"
+PRIORITY_MEDIUM = "medium"
+PRIORITY_LOW    = "low"
+
+# Sort key: lower number = higher priority in the sorted output
+_PRIORITY_ORDER = {PRIORITY_HIGH: 0, PRIORITY_MEDIUM: 1, PRIORITY_LOW: 2}
+
+# UI badges used by both CLI and Streamlit
+PRIORITY_EMOJI = {PRIORITY_HIGH: "🔴", PRIORITY_MEDIUM: "🟡", PRIORITY_LOW: "🟢"}
 
 
 class Task:
-    """Represents a single pet care activity with a description, time, frequency, and completion status."""
+    """Represents a single pet care activity with description, time, frequency, priority, and status."""
 
-    # How many days until the next occurrence for each frequency
     _RECURRENCE_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
 
     def __init__(self, description: str, time: str, frequency: str = "daily",
-                 due_date: date | None = None):
-        """Initialize a Task with a description, scheduled time, frequency, and optional due date."""
+                 due_date: date | None = None, priority: str = PRIORITY_MEDIUM):
+        """Initialize a Task with description, time, frequency, due date, and priority."""
         self.description = description
-        self.time = time              # "HH:MM" string, e.g. "08:00"
+        self.time = time              # "HH:MM" 24-hour string
         self.frequency = frequency   # "daily" | "weekly" | "monthly" | "once"
         self.due_date = due_date or date.today()
+        self.priority = priority     # "high" | "medium" | "low"
         self.completed = False
 
     def mark_complete(self):
@@ -32,13 +45,38 @@ class Task:
         days = self._RECURRENCE_DAYS.get(self.frequency)
         if days is None:
             return None
-        next_date = self.due_date + timedelta(days=days)
-        return Task(self.description, self.time, self.frequency, next_date)
+        return Task(self.description, self.time, self.frequency,
+                    self.due_date + timedelta(days=days), self.priority)
+
+    def to_dict(self) -> dict:
+        """Serialize this Task to a JSON-compatible dictionary."""
+        return {
+            "description": self.description,
+            "time": self.time,
+            "frequency": self.frequency,
+            "due_date": self.due_date.isoformat(),
+            "priority": self.priority,
+            "completed": self.completed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Deserialize a Task from a dictionary (inverse of to_dict)."""
+        task = cls(
+            description=data["description"],
+            time=data["time"],
+            frequency=data.get("frequency", "daily"),
+            due_date=date.fromisoformat(data["due_date"]),
+            priority=data.get("priority", PRIORITY_MEDIUM),
+        )
+        task.completed = data.get("completed", False)
+        return task
 
     def __repr__(self):
-        """Return a developer-friendly string representation of the task."""
+        """Return a developer-friendly string representation."""
         status = "✓" if self.completed else "○"
-        return f"[{status}] {self.time} — {self.description} ({self.frequency}, due {self.due_date})"
+        badge = PRIORITY_EMOJI.get(self.priority, "")
+        return f"[{status}] {badge} {self.time} — {self.description} ({self.frequency}, due {self.due_date})"
 
 
 class Pet:
@@ -63,13 +101,29 @@ class Pet:
         """Return all incomplete tasks for this pet."""
         return [t for t in self.tasks if not t.completed]
 
+    def to_dict(self) -> dict:
+        """Serialize this Pet to a JSON-compatible dictionary."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "age": self.age,
+            "tasks": [t.to_dict() for t in self.tasks],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Pet":
+        """Deserialize a Pet from a dictionary (inverse of to_dict)."""
+        pet = cls(name=data["name"], species=data["species"], age=data["age"])
+        pet.tasks = [Task.from_dict(t) for t in data.get("tasks", [])]
+        return pet
+
     def __repr__(self):
-        """Return a developer-friendly string representation of the pet."""
+        """Return a developer-friendly string representation."""
         return f"Pet({self.name}, {self.species}, age={self.age})"
 
 
 class Owner:
-    """Manages multiple pets and provides unified access to all their tasks."""
+    """Manages multiple pets, provides unified task access, and handles JSON persistence."""
 
     def __init__(self, name: str, email: str):
         """Initialize an Owner with a name and email address."""
@@ -89,8 +143,47 @@ class Owner:
         """Return all (pet, task) pairs across every owned pet."""
         return [(pet, task) for pet in self.owned_pets for task in pet.tasks]
 
+    # ── JSON persistence ──────────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        """Serialize the full owner (including all pets and tasks) to a dictionary."""
+        return {
+            "name": self.name,
+            "email": self.email,
+            "owned_pets": [p.to_dict() for p in self.owned_pets],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Owner":
+        """Deserialize an Owner from a dictionary (inverse of to_dict)."""
+        owner = cls(name=data["name"], email=data["email"])
+        owner.owned_pets = [Pet.from_dict(p) for p in data.get("owned_pets", [])]
+        return owner
+
+    def save_to_json(self, path: str = "data.json"):
+        """Persist the owner, pets, and tasks to a JSON file.
+
+        Writes an atomic replacement so a crash mid-write never corrupts the file.
+        """
+        file = Path(path)
+        tmp = file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.to_dict(), indent=2))
+        tmp.replace(file)
+
+    @classmethod
+    def load_from_json(cls, path: str = "data.json") -> "Owner":
+        """Load and reconstruct an Owner from a JSON file.
+
+        Returns a blank Owner if the file does not exist, so first-run is safe.
+        """
+        file = Path(path)
+        if not file.exists():
+            return cls(name="My Household", email="owner@pawpal.com")
+        data = json.loads(file.read_text())
+        return cls.from_dict(data)
+
     def __repr__(self):
-        """Return a developer-friendly string representation of the owner."""
+        """Return a developer-friendly string representation."""
         return f"Owner({self.name}, {len(self.owned_pets)} pet(s))"
 
 
@@ -119,54 +212,69 @@ class ConflictWarning:
 
 
 class Scheduler:
-    """The brain of PawPal+: sorts, filters, manages recurring tasks, and detects conflicts."""
+    """The brain of PawPal+: sorts by priority+time, filters, detects conflicts, finds open slots."""
 
     def __init__(self, owner: Owner):
         """Initialize the Scheduler with a reference to an Owner."""
         self.owner = owner
 
-    # ── Sorting ──────────────────────────────────────────────────────────────
+    # ── Sorting ───────────────────────────────────────────────────────────────
 
     def get_todays_schedule(self) -> list[tuple[Pet, Task]]:
-        """Return all tasks sorted chronologically by time (HH:MM string sort is correct for 24h)."""
-        all_tasks = self.owner.get_all_tasks()
-        return sorted(all_tasks, key=lambda pair: pair[1].time)
+        """Return all tasks sorted first by priority (high→low), then chronologically by time.
 
-    # ── Filtering ────────────────────────────────────────────────────────────
+        Challenge 3 — Priority-Based Scheduling:
+        The sort key is a tuple (priority_rank, time_string). Python compares tuples
+        element-by-element, so high-priority tasks always float above lower-priority ones
+        that share the same time slot, without any explicit if-else logic.
+        """
+        all_tasks = self.owner.get_all_tasks()
+        return sorted(
+            all_tasks,
+            key=lambda pair: (_PRIORITY_ORDER.get(pair[1].priority, 1), pair[1].time)
+        )
+
+    # ── Filtering ─────────────────────────────────────────────────────────────
 
     def get_pending_tasks(self) -> list[tuple[Pet, Task]]:
-        """Return only incomplete tasks, sorted by time."""
+        """Return only incomplete tasks, sorted by priority then time."""
         return [(pet, task) for pet, task in self.get_todays_schedule()
                 if not task.completed]
 
     def filter_by_pet(self, pet_name: str) -> list[tuple[Pet, Task]]:
-        """Return all tasks (sorted) belonging to a specific pet, matched case-insensitively."""
+        """Return tasks for a specific pet, matched case-insensitively, sorted by priority+time."""
         return [
             (pet, task) for pet, task in self.get_todays_schedule()
             if pet.name.lower() == pet_name.lower()
         ]
 
     def filter_by_status(self, completed: bool) -> list[tuple[Pet, Task]]:
-        """Return tasks filtered by completion status, sorted by time."""
+        """Return tasks filtered by completion status, sorted by priority then time."""
         return [
             (pet, task) for pet, task in self.get_todays_schedule()
             if task.completed == completed
         ]
 
     def filter_by_frequency(self, frequency: str) -> list[tuple[Pet, Task]]:
-        """Return tasks matching a specific frequency (e.g. 'daily', 'weekly'), sorted by time."""
+        """Return tasks matching a specific frequency, sorted by priority then time."""
         return [
             (pet, task) for pet, task in self.get_todays_schedule()
             if task.frequency.lower() == frequency.lower()
         ]
 
-    # ── Recurring tasks ──────────────────────────────────────────────────────
+    def filter_by_priority(self, priority: str) -> list[tuple[Pet, Task]]:
+        """Return only tasks at the given priority level ('high', 'medium', or 'low')."""
+        return [
+            (pet, task) for pet, task in self.get_todays_schedule()
+            if task.priority.lower() == priority.lower()
+        ]
+
+    # ── Recurring tasks ───────────────────────────────────────────────────────
 
     def mark_task_complete(self, pet_name: str, task_description: str) -> bool:
-        """Mark a task complete and automatically schedule its next occurrence if recurring.
+        """Mark a task complete and auto-schedule the next occurrence for recurring tasks.
 
         Returns True if the task was found, False otherwise.
-        For daily/weekly/monthly tasks, a new Task is appended with the next due date.
         """
         for pet in self.owner.owned_pets:
             if pet.name.lower() != pet_name.lower():
@@ -181,14 +289,14 @@ class Scheduler:
                 return True
         return False
 
-    # ── Conflict detection ───────────────────────────────────────────────────
+    # ── Conflict detection ────────────────────────────────────────────────────
 
     def detect_conflicts(self) -> list[ConflictWarning]:
-        """Return a list of ConflictWarning objects for every pair of tasks sharing the same time.
+        """Return ConflictWarning objects for every pair of tasks sharing the same time slot.
 
-        Strategy: group tasks by time slot using a dict, then flag any slot with >1 task.
-        This is O(n) in grouping and never crashes — it returns warnings, not exceptions.
-        The tradeoff: only exact HH:MM matches are detected; overlapping durations are not.
+        Strategy: O(n) grouping by time slot via defaultdict; flags any slot with >1 task.
+        Returns warnings, never raises — the app never crashes on scheduling issues.
+        Tradeoff: only exact HH:MM matches detected; overlapping durations are not.
         """
         by_time: dict[str, list[tuple[Pet, Task]]] = defaultdict(list)
         for pet, task in self.get_todays_schedule():
@@ -203,18 +311,83 @@ class Scheduler:
                     warnings.append(ConflictWarning(time_slot, pet_a, task_a, pet_b, task_b))
         return warnings
 
-    # ── Printing ─────────────────────────────────────────────────────────────
+    # ── Challenge 1: Next available slot ──────────────────────────────────────
+
+    def next_available_slot(self, after: str = "00:00",
+                            step_minutes: int = 30) -> str:
+        """Find the next free HH:MM time slot with no tasks already scheduled.
+
+        Challenge 1 — Advanced Algorithmic Capability:
+        Algorithm: generate candidate slots from `after` in `step_minutes` increments
+        across a 24-hour window. Return the first candidate not present in the set of
+        already-occupied slots. This is O(slots_per_day) in the worst case — at most
+        48 iterations for 30-minute steps — and always terminates.
+
+        Args:
+            after: Start searching from this time (HH:MM, exclusive). Defaults to "00:00".
+            step_minutes: Granularity of slot candidates in minutes. Defaults to 30.
+
+        Returns:
+            The first unoccupied HH:MM slot string, or "No slot available" if the full
+            24-hour window is occupied (extremely unlikely in practice).
+        """
+        occupied = {task.time for _, task in self.owner.get_all_tasks()}
+
+        # Parse start time into total minutes
+        start_h, start_m = map(int, after.split(":"))
+        start_total = start_h * 60 + start_m + step_minutes  # exclusive — start after `after`
+
+        # Clamp to within 24 hours (1440 minutes)
+        total_minutes_in_day = 24 * 60
+        steps = total_minutes_in_day // step_minutes
+
+        for i in range(steps):
+            candidate_total = (start_total + i * step_minutes) % total_minutes_in_day
+            h, m = divmod(candidate_total, 60)
+            candidate = f"{h:02d}:{m:02d}"
+            if candidate not in occupied:
+                return candidate
+
+        return "No slot available"
+
+    def suggest_slots(self, count: int = 3, step_minutes: int = 30) -> list[str]:
+        """Return up to `count` free time slots spread across the day.
+
+        Useful for suggesting when to schedule a new task without creating conflicts.
+        Scans from 06:00 (typical pet care start) in `step_minutes` increments.
+        """
+        occupied = {task.time for _, task in self.owner.get_all_tasks()}
+        suggestions: list[str] = []
+        start_total = 6 * 60  # 06:00
+        steps = (24 * 60) // step_minutes
+
+        for i in range(steps):
+            if len(suggestions) >= count:
+                break
+            candidate_total = (start_total + i * step_minutes) % (24 * 60)
+            h, m = divmod(candidate_total, 60)
+            candidate = f"{h:02d}:{m:02d}"
+            if candidate not in occupied:
+                suggestions.append(candidate)
+
+        return suggestions
+
+    # ── CLI printing ──────────────────────────────────────────────────────────
 
     def print_schedule(self, pairs: list[tuple[Pet, Task]] | None = None):
-        """Print a formatted schedule table; defaults to the full sorted schedule if no pairs given."""
+        """Print a formatted, priority-color-coded schedule table to the terminal."""
         pairs = pairs if pairs is not None else self.get_todays_schedule()
-        width = 50
+        width = 60
         print(f"\n{'=' * width}")
         print(f"  PawPal+ Schedule — {self.owner.name}")
         print(f"{'=' * width}")
         if not pairs:
             print("  No tasks to display.")
         for pet, task in pairs:
-            status = "✓ Done" if task.completed else "○ Pending"
-            print(f"  {task.time}  [{pet.name:10s}]  {task.description:<25s}  {status}")
+            status = "✓" if task.completed else "○"
+            badge = PRIORITY_EMOJI.get(task.priority, "")
+            print(
+                f"  {task.time}  {badge} [{pet.name:10s}]"
+                f"  {task.description:<25s}  {'Done' if task.completed else 'Pending'}"
+            )
         print(f"{'=' * width}\n")

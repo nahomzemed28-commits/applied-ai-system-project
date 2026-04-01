@@ -34,6 +34,27 @@ A smart pet care management system built with Python and Streamlit. PawPal+ help
 
 ---
 
+## Extension Challenges
+
+### Challenge 1 — Smart Slot Suggester (`next_available_slot` / `suggest_slots`)
+
+Added to `Scheduler` in [pawpal_system.py](pawpal_system.py):
+
+```python
+scheduler.next_available_slot(after="07:30", step_minutes=30)  # → "08:00"
+scheduler.suggest_slots(count=3, step_minutes=15)              # → ["06:00", "06:15", "06:30"]
+```
+
+**Algorithm:** Builds a set of occupied `HH:MM` slots from all tasks (`O(n)`), then iterates candidate slots in `step_minutes` increments from the start time, returning the first slot not in the set. Worst-case `O(24*60/step)` — at most 96 iterations for 15-minute steps. A dedicated **Slot Suggester** tab in the UI lets you tune granularity and count interactively.
+
+### Challenge 2 — JSON Persistence
+
+`Owner` gained `save_to_json(path)` and `load_from_json(path)` class methods. The full object graph (`Owner → Pet → Task`) serializes via nested `to_dict()` / `from_dict()` methods on each class. Writes are atomic (write to `.tmp`, then `rename`) so a crash never corrupts the file. `app.py` loads from `data.json` on startup and auto-saves on every task completion.
+
+### Challenge 3 — Priority-Based Scheduling
+
+`Task` gained a `priority` field (`"high"` / `"medium"` / `"low"`, default `"medium"`). `Scheduler.get_todays_schedule()` now sorts by a tuple key `(priority_rank, time)` — high-priority tasks always appear before medium, medium before low, with time as the tiebreaker within each tier. Priority is color-coded throughout the UI (🔴 High, 🟡 Medium, 🟢 Low) and is preserved through `next_occurrence()` and JSON round-trips.
+
 ## System Architecture
 
 See [uml_final.md](uml_final.md) for the complete Mermaid.js class diagram.
@@ -88,7 +109,7 @@ Run the full test suite:
 python -m pytest
 ```
 
-**Coverage (25 tests, all passing):**
+**Coverage (38 tests, all passing):**
 
 | Category | Count | What's verified |
 |---|---|---|
@@ -99,8 +120,11 @@ python -m pytest
 | Conflict detection | 3 | Same-time tasks flagged, no false positives, warning message readable |
 | Recurring tasks | 3 | Daily → +1 day, weekly → +7 days, `once` → no recurrence |
 | Edge cases | 7 | Empty pet, no-pet owner, unknown lookups return False, case-insensitive pet match |
+| Priority scheduling | 5 | Default priority, sort order, same-time tiebreaker, filter by priority, preserved by recurrence |
+| JSON persistence | 5 | Pet names, task count, priority, completion status round-trip; missing file returns blank Owner |
+| Slot suggester | 3 | Skips occupied slots, returns requested count, all suggestions unique |
 
-**Confidence Level: ★★★★☆ (4/5)** — Core logic fully covered; duration-based overlap detection is the known untested gap.
+**Confidence Level: ★★★★☆ (4/5)** — Core logic and all three extension features fully covered; duration-based overlap detection remains the known untested gap.
 
 ---
 

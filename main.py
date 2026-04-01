@@ -1,95 +1,86 @@
-"""Demo script verifying all Phase 4 algorithmic features in the terminal."""
+"""Demo script verifying all features including priority scheduling, persistence, and slot suggestion."""
 
-from pawpal_system import Task, Pet, Owner, Scheduler
+import os
+from pawpal_system import (
+    Task, Pet, Owner, Scheduler,
+    PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW, PRIORITY_EMOJI,
+)
 
 
 def section(title: str):
-    print(f"\n{'─' * 50}")
+    print(f"\n{'─' * 55}")
     print(f"  {title}")
-    print(f"{'─' * 50}")
+    print(f"{'─' * 55}")
 
 
 def main():
-    # ── Setup ─────────────────────────────────────────────────────────────────
+    # ── Setup ──────────────────────────────────────────────────────────────────
     owner = Owner(name="Nahom", email="nahom@pawpal.com")
-
-    luna = Pet(name="Luna", species="Dog", age=3)
+    luna  = Pet(name="Luna",  species="Dog", age=3)
     mochi = Pet(name="Mochi", species="Cat", age=5)
     owner.add_pet(luna)
     owner.add_pet(mochi)
 
-    # Tasks added intentionally out of chronological order to prove sorting works
-    luna.add_task(Task("Evening walk",        "18:00", "daily"))
-    luna.add_task(Task("Morning walk",        "07:00", "daily"))
-    luna.add_task(Task("Breakfast feeding",   "08:00", "daily"))
-    luna.add_task(Task("Heartworm meds",      "08:00", "weekly"))  # conflict with Mochi below
+    # Tasks with mixed priorities and out-of-order times
+    luna.add_task(Task("Evening walk",       "18:00", "daily",   priority=PRIORITY_MEDIUM))
+    luna.add_task(Task("Heartworm meds",     "08:00", "weekly",  priority=PRIORITY_HIGH))
+    luna.add_task(Task("Morning walk",       "07:00", "daily",   priority=PRIORITY_MEDIUM))
+    luna.add_task(Task("Breakfast feeding",  "08:00", "daily",   priority=PRIORITY_HIGH))   # conflict
 
-    mochi.add_task(Task("Playtime",           "12:00", "daily"))
-    mochi.add_task(Task("Breakfast feeding",  "08:00", "daily"))   # same time as Luna's meds
-    mochi.add_task(Task("Flea treatment",     "19:00", "once"))
+    mochi.add_task(Task("Playtime",          "12:00", "daily",   priority=PRIORITY_LOW))
+    mochi.add_task(Task("Breakfast feeding", "08:00", "daily",   priority=PRIORITY_HIGH))   # conflict
+    mochi.add_task(Task("Flea treatment",    "19:00", "once",    priority=PRIORITY_MEDIUM))
 
     scheduler = Scheduler(owner)
 
-    # ── 1. SORTING ────────────────────────────────────────────────────────────
-    section("1. Sorted Full Schedule (tasks were added out of order)")
+    # ── 1. Priority + Time Sort ────────────────────────────────────────────────
+    section("1. Priority-sorted schedule (High tasks appear first within each time slot)")
     scheduler.print_schedule()
 
-    # ── 2. FILTERING by pet ───────────────────────────────────────────────────
-    section("2a. Filter — Luna's tasks only")
-    scheduler.print_schedule(scheduler.filter_by_pet("Luna"))
+    # ── 2. Filter by priority ──────────────────────────────────────────────────
+    section("2. Filter — HIGH priority tasks only")
+    scheduler.print_schedule(scheduler.filter_by_priority(PRIORITY_HIGH))
 
-    section("2b. Filter — Mochi's tasks only")
-    scheduler.print_schedule(scheduler.filter_by_pet("Mochi"))
+    section("3. Filter — LOW priority tasks only")
+    scheduler.print_schedule(scheduler.filter_by_priority(PRIORITY_LOW))
 
-    # ── 3. FILTERING by status ────────────────────────────────────────────────
-    # Mark a couple complete first
-    scheduler.mark_task_complete("Luna", "Morning walk")
-    scheduler.mark_task_complete("Mochi", "Playtime")
+    # ── 3. Conflict detection ──────────────────────────────────────────────────
+    section("4. Conflict detection")
+    for w in scheduler.detect_conflicts():
+        print(f"  {w.message()}")
 
-    section("3a. Filter — completed tasks only")
-    scheduler.print_schedule(scheduler.filter_by_status(completed=True))
-
-    section("3b. Filter — pending tasks only")
-    scheduler.print_schedule(scheduler.filter_by_status(completed=False))
-
-    # ── 4. FILTERING by frequency ─────────────────────────────────────────────
-    section("4. Filter — daily tasks only")
-    scheduler.print_schedule(scheduler.filter_by_frequency("daily"))
-
-    # ── 5. RECURRING TASKS ────────────────────────────────────────────────────
-    section("5. Recurring task — completing 'Evening walk' (daily) auto-schedules next occurrence")
-    luna_tasks_before = len(luna.tasks)
-    scheduler.mark_task_complete("Luna", "Evening walk")
-    luna_tasks_after = len(luna.tasks)
-    print(f"  Luna's task count before: {luna_tasks_before}")
-    print(f"  Luna's task count after:  {luna_tasks_after}  (new occurrence appended)")
+    # ── 4. Recurring task with priority preserved ──────────────────────────────
+    section("5. Complete 'Heartworm meds' (High, weekly) — next occurrence should keep HIGH priority")
+    scheduler.mark_task_complete("Luna", "Heartworm meds")
     newest = luna.tasks[-1]
     print(f"  New task: {newest}")
+    print(f"  Priority preserved: {PRIORITY_EMOJI[newest.priority]} {newest.priority}")
 
-    section("6. Recurring task — completing 'Heartworm meds' (weekly) auto-schedules next")
-    meds_before = len(luna.tasks)
-    scheduler.mark_task_complete("Luna", "Heartworm meds")
-    meds_after = len(luna.tasks)
-    print(f"  Luna's task count before: {meds_before}")
-    print(f"  Luna's task count after:  {meds_after}")
-    print(f"  New task: {luna.tasks[-1]}")
+    # ── 5. Next available slot ─────────────────────────────────────────────────
+    section("6. Next available slot (30-min steps) after 07:30")
+    slot = scheduler.next_available_slot(after="07:30", step_minutes=30)
+    print(f"  Next free slot: {slot}")
 
-    # ── 6. CONFLICT DETECTION ─────────────────────────────────────────────────
-    section("7. Conflict detection — tasks at the same time slot")
-    conflicts = scheduler.detect_conflicts()
-    if conflicts:
-        for warning in conflicts:
-            print(f"  {warning.message()}")
-    else:
-        print("  No conflicts detected.")
+    section("7. Top 4 suggested free slots (15-min steps from 06:00)")
+    suggestions = scheduler.suggest_slots(count=4, step_minutes=15)
+    for s in suggestions:
+        print(f"  🕐 {s}")
 
-    # ── 7. ONCE-OFF task does NOT recur ──────────────────────────────────────
-    section("8. 'once' frequency — completing Flea treatment should NOT create next occurrence")
-    mochi_before = len(mochi.tasks)
-    scheduler.mark_task_complete("Mochi", "Flea treatment")
-    mochi_after = len(mochi.tasks)
-    print(f"  Mochi's task count before: {mochi_before}")
-    print(f"  Mochi's task count after:  {mochi_after}  (should be same — no recurrence)")
+    # ── 6. JSON persistence ────────────────────────────────────────────────────
+    section("8. Save → load round-trip (JSON persistence)")
+    test_file = "/tmp/pawpal_test.json"
+    owner.save_to_json(test_file)
+    reloaded = Owner.load_from_json(test_file)
+    print(f"  Original pets : {[p.name for p in owner.owned_pets]}")
+    print(f"  Reloaded pets : {[p.name for p in reloaded.owned_pets]}")
+    orig_tasks = sum(len(p.tasks) for p in owner.owned_pets)
+    load_tasks = sum(len(p.tasks) for p in reloaded.owned_pets)
+    print(f"  Task count    : {orig_tasks} → {load_tasks} (match: {orig_tasks == load_tasks})")
+    # Verify priority round-trips
+    orig_pris  = [t.priority for p in owner.owned_pets for t in p.tasks]
+    load_pris  = [t.priority for p in reloaded.owned_pets for t in p.tasks]
+    print(f"  Priorities match: {orig_pris == load_pris}")
+    os.remove(test_file)
 
 
 if __name__ == "__main__":

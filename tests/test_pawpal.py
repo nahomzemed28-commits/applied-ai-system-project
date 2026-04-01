@@ -1,8 +1,14 @@
 """Automated tests for PawPal+ core logic."""
 
+import json
+import os
+import tempfile
 from datetime import date, timedelta
 import pytest
-from pawpal_system import Task, Pet, Owner, Scheduler
+from pawpal_system import (
+    Task, Pet, Owner, Scheduler,
+    PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW,
+)
 
 
 # ── Task tests ──────────────────────────────────────────────────────────────
@@ -267,3 +273,144 @@ def test_remove_task_from_pet():
     pet.remove_task("Walk")
     assert len(pet.tasks) == 1
     assert pet.tasks[0].description == "Feeding"
+
+
+# ── Priority tests ───────────────────────────────────────────────────────────
+
+def test_task_default_priority_is_medium():
+    """A Task created without an explicit priority should default to 'medium'."""
+    task = Task("Walk", "07:00", "daily")
+    assert task.priority == PRIORITY_MEDIUM
+
+
+def test_priority_sort_high_before_medium_before_low():
+    """get_todays_schedule() should order: high tasks first, then medium, then low."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Grooming",  "10:00", "once",  priority=PRIORITY_LOW))
+    pet.add_task(Task("Walk",      "10:00", "daily", priority=PRIORITY_MEDIUM))
+    pet.add_task(Task("Meds",      "10:00", "daily", priority=PRIORITY_HIGH))
+    scheduler = _make_scheduler(pet)
+    priorities = [task.priority for _, task in scheduler.get_todays_schedule()]
+    assert priorities == [PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW]
+
+
+def test_high_priority_sorted_before_lower_at_same_time():
+    """Within the same time slot, a high-priority task should appear before a low-priority one."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Playtime", "09:00", "daily", priority=PRIORITY_LOW))
+    pet.add_task(Task("Meds",     "09:00", "daily", priority=PRIORITY_HIGH))
+    scheduler = _make_scheduler(pet)
+    schedule = scheduler.get_todays_schedule()
+    assert schedule[0][1].priority == PRIORITY_HIGH
+
+
+def test_filter_by_priority_returns_only_matching():
+    """filter_by_priority('high') should return only high-priority tasks."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Meds",     "08:00", "daily", priority=PRIORITY_HIGH))
+    pet.add_task(Task("Walk",     "09:00", "daily", priority=PRIORITY_MEDIUM))
+    pet.add_task(Task("Grooming", "10:00", "once",  priority=PRIORITY_LOW))
+    scheduler = _make_scheduler(pet)
+    result = scheduler.filter_by_priority(PRIORITY_HIGH)
+    assert len(result) == 1
+    assert result[0][1].priority == PRIORITY_HIGH
+
+
+def test_next_occurrence_preserves_priority():
+    """next_occurrence() should carry the same priority level to the new task."""
+    task = Task("Meds", "08:00", "daily", priority=PRIORITY_HIGH)
+    next_task = task.next_occurrence()
+    assert next_task.priority == PRIORITY_HIGH
+
+
+# ── JSON persistence tests ────────────────────────────────────────────────────
+
+def _round_trip(owner: Owner) -> Owner:
+    """Save owner to a temp file and reload it; return the reloaded Owner."""
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
+    try:
+        owner.save_to_json(path)
+        return Owner.load_from_json(path)
+    finally:
+        os.unlink(path)
+
+
+def test_save_and_load_preserves_pet_names():
+    """After a save/load round trip, pet names should be identical."""
+    owner = Owner("Test", "t@t.com")
+    owner.add_pet(Pet("Luna", "Dog", 3))
+    owner.add_pet(Pet("Mochi", "Cat", 5))
+    reloaded = _round_trip(owner)
+    assert [p.name for p in reloaded.owned_pets] == ["Luna", "Mochi"]
+
+
+def test_save_and_load_preserves_task_count():
+    """After a save/load round trip, the total task count must match exactly."""
+    owner = Owner("Test", "t@t.com")
+    pet = Pet("Luna", "Dog", 3)
+    pet.add_task(Task("Walk",    "07:00", "daily",  priority=PRIORITY_MEDIUM))
+    pet.add_task(Task("Feeding", "08:00", "daily",  priority=PRIORITY_HIGH))
+    pet.add_task(Task("Meds",    "09:00", "weekly", priority=PRIORITY_HIGH))
+    owner.add_pet(pet)
+    reloaded = _round_trip(owner)
+    assert len(reloaded.owned_pets[0].tasks) == 3
+
+
+def test_save_and_load_preserves_priority():
+    """Priority levels must survive the JSON serialization round trip."""
+    owner = Owner("Test", "t@t.com")
+    pet = Pet("Luna", "Dog", 3)
+    pet.add_task(Task("Meds", "08:00", "daily", priority=PRIORITY_HIGH))
+    owner.add_pet(pet)
+    reloaded = _round_trip(owner)
+    assert reloaded.owned_pets[0].tasks[0].priority == PRIORITY_HIGH
+
+
+def test_save_and_load_preserves_completion_status():
+    """A completed task should still be marked completed after a round trip."""
+    owner = Owner("Test", "t@t.com")
+    pet = Pet("Luna", "Dog", 3)
+    task = Task("Walk", "07:00", "once")
+    task.mark_complete()
+    pet.add_task(task)
+    owner.add_pet(pet)
+    reloaded = _round_trip(owner)
+    assert reloaded.owned_pets[0].tasks[0].completed is True
+
+
+def test_load_from_nonexistent_file_returns_blank_owner():
+    """load_from_json() on a missing file should return a blank Owner, not raise."""
+    owner = Owner.load_from_json("/tmp/__does_not_exist_pawpal__.json")
+    assert isinstance(owner, Owner)
+    assert len(owner.owned_pets) == 0
+
+
+# ── Slot suggester tests ──────────────────────────────────────────────────────
+
+def test_next_available_slot_skips_occupied():
+    """next_available_slot() should skip times that already have a task."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Walk",    "07:00", "daily"))
+    pet.add_task(Task("Feeding", "07:30", "daily"))
+    scheduler = _make_scheduler(pet)
+    # Both 07:00 and 07:30 are taken; next 30-min slot after 06:30 should be 08:00
+    slot = scheduler.next_available_slot(after="06:30", step_minutes=30)
+    assert slot == "08:00"
+
+
+def test_suggest_slots_returns_requested_count():
+    """suggest_slots() should return exactly `count` slots when enough are free."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Walk", "07:00", "daily"))
+    scheduler = _make_scheduler(pet)
+    suggestions = scheduler.suggest_slots(count=4, step_minutes=30)
+    assert len(suggestions) == 4
+
+
+def test_suggest_slots_are_all_unique():
+    """suggest_slots() should never return duplicate time slots."""
+    pet = Pet("Buddy", "Dog", 1)
+    scheduler = _make_scheduler(pet)
+    suggestions = scheduler.suggest_slots(count=5, step_minutes=60)
+    assert len(suggestions) == len(set(suggestions))

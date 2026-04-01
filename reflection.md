@@ -231,6 +231,51 @@ The most important lesson: **AI accelerates generation, but the human controls a
 
 Being the lead architect means staying one step ahead of the generated code: knowing what question to ask next, knowing when an AI suggestion solves the wrong problem, and knowing when "good enough" is actually good enough for the current phase.
 
+---
+
+## Extension Challenges Reflection
+
+### Challenge 1 — Next Available Slot
+
+The key design question was: generate slots lazily (stop at the first free one) vs. eagerly (collect all free slots, then slice). Lazy generation via a `for` loop with an early return is simpler and uses O(1) memory — the `suggest_slots` variant builds a list but stops at `count`. The 24-hour boundary wraps using `% (24*60)` so the algorithm handles "after 23:00" correctly without special-casing midnight.
+
+### Challenge 2 — JSON Persistence
+
+The main serialization decision was: use a third-party library (e.g., `marshmallow`) vs. hand-roll `to_dict` / `from_dict`. The hand-rolled approach was chosen because: (a) the object graph is shallow and predictable, (b) it adds zero dependencies, and (c) it's easier to read during a code review. The atomic write pattern (`write to .tmp → rename`) was added after considering what happens if the process is interrupted mid-write — `rename` is atomic on POSIX systems.
+
+### Challenge 3 — Priority Scheduling
+
+Sorting by `(priority_rank, time)` tuple was more Pythonic than adding an `if priority == "high"` branch inside the sort comparator. Python's tuple comparison is element-by-element, so the compound key handles all cases without explicit conditionals.
+
+### Prompt Comparison (Challenge 5)
+
+**Task tested:** "Implement a method that finds the next free time slot in a 24-hour schedule given a set of occupied HH:MM slots."
+
+**Approach A (iterative, naive):**
+```python
+# Generate every minute, check membership
+for minute in range(24 * 60):
+    h, m = divmod(minute, 60)
+    if f"{h:02d}:{m:02d}" not in occupied:
+        return f"{h:02d}:{m:02d}"
+```
+Simple but iterates up to 1440 times and returns minute-granularity results, which isn't useful for scheduling.
+
+**Approach B (step-based, chosen):**
+```python
+for i in range(steps):
+    candidate_total = (start_total + i * step_minutes) % total_minutes_in_day
+    h, m = divmod(candidate_total, 60)
+    candidate = f"{h:02d}:{m:02d}"
+    if candidate not in occupied:
+        return candidate
+```
+More Pythonic: parameterized granularity, modular arithmetic for midnight wrap, early return. The `step_minutes` parameter makes it reusable for both 15-min and 30-min slot systems. **Approach B was chosen** because it maps to how pet care is actually scheduled (30-minute blocks, not minute-by-minute).
+
+**Key learning:** The "more modular" solution was also the more readable one here. The parameters (`after`, `step_minutes`) serve as documentation — they name the assumptions that would otherwise be buried in magic numbers.
+
+---
+
 **What went well:** Iterative, phase-by-phase building meant each layer was verified before the next was added. The CLI demo in Phase 2 caught issues before the UI existed, which saved significant debugging time.
 
 **Challenges encountered:** Streamlit's stateless re-run model required careful session_state design. Early versions lost all pet data on every button click until the `if "owner" not in st.session_state` pattern was established.

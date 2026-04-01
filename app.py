@@ -1,23 +1,35 @@
-"""PawPal+ Streamlit UI — fully wired to the pawpal_system.py algorithmic layer."""
+"""PawPal+ Streamlit UI — priority scheduling, JSON persistence, smart slot suggestions."""
 
 import streamlit as st
 from datetime import date
 
-from pawpal_system import Task, Pet, Owner, Scheduler
+from pawpal_system import (
+    Task, Pet, Owner, Scheduler,
+    PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW, PRIORITY_EMOJI,
+)
 
-# ── Session state — persist Owner across Streamlit re-runs ───────────────────
+DATA_FILE = "data.json"
+
+# ── Session state — load persisted Owner on first run, keep it across re-runs ─
 if "owner" not in st.session_state:
-    st.session_state.owner = Owner(name="My Household", email="owner@pawpal.com")
+    st.session_state.owner = Owner.load_from_json(DATA_FILE)
 
 owner: Owner = st.session_state.owner
 scheduler = Scheduler(owner)
 
-# ── Page config ───────────────────────────────────────────────────────────────
+
+def save():
+    """Helper: persist owner to disk and trigger a rerun."""
+    owner.save_to_json(DATA_FILE)
+    st.rerun()
+
+
+# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="wide")
 st.title("🐾 PawPal+")
-st.caption("Smart pet care management — keeping your furry friends happy and healthy.")
+st.caption("Smart pet care management — priority scheduling, conflict detection, and auto-recurrence.")
 
-# ── Sidebar — live stats ──────────────────────────────────────────────────────
+# ── Sidebar — live stats + save/load controls ─────────────────────────────────
 with st.sidebar:
     st.header("Dashboard")
 
@@ -41,113 +53,125 @@ with st.sidebar:
         st.success("No conflicts")
 
     st.divider()
+
+    # Challenge 2 — Persistence controls
+    if st.button("💾 Save data", use_container_width=True):
+        owner.save_to_json(DATA_FILE)
+        st.success("Saved!")
+
+    if st.button("🔃 Reload from file", use_container_width=True):
+        st.session_state.owner = Owner.load_from_json(DATA_FILE)
+        st.rerun()
+
     st.caption(f"Today: {date.today().strftime('%A, %B %d %Y')}")
 
-# ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_schedule, tab_pets, tab_add_task = st.tabs(
-    ["📅 Today's Schedule", "🐶 My Pets", "➕ Add Task"]
-)
+# ── Priority legend ────────────────────────────────────────────────────────────
+with st.expander("Priority legend", expanded=False):
+    col1, col2, col3 = st.columns(3)
+    col1.markdown(f"{PRIORITY_EMOJI[PRIORITY_HIGH]} **High** — urgent care (meds, vet appointments)")
+    col2.markdown(f"{PRIORITY_EMOJI[PRIORITY_MEDIUM]} **Medium** — regular routine (feedings, walks)")
+    col3.markdown(f"{PRIORITY_EMOJI[PRIORITY_LOW]} **Low** — optional / enrichment (playtime, grooming)")
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ── Tabs ───────────────────────────────────────────────────────────────────────
+tab_schedule, tab_pets, tab_add_task, tab_suggest = st.tabs([
+    "📅 Today's Schedule", "🐶 My Pets", "➕ Add Task", "💡 Slot Suggester"
+])
+
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — Today's Schedule
-# ═════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 with tab_schedule:
 
-    # ── Conflict warnings — each conflict gets its own callout ────────────────
+    # Conflict warnings
     conflicts = scheduler.detect_conflicts()
     if conflicts:
         with st.expander(f"⚠️ {len(conflicts)} scheduling conflict(s) — click to review", expanded=True):
-            st.caption(
-                "These tasks are scheduled at the same time. "
-                "Consider rescheduling one to avoid rushing."
-            )
+            st.caption("These tasks share a time slot. Consider rescheduling one.")
             for warning in conflicts:
                 st.warning(warning.message())
 
     st.subheader("Today's Schedule")
+    st.caption("Sorted by priority (🔴 High → 🟡 Medium → 🟢 Low), then by time within each priority tier.")
 
-    # ── Filter controls ───────────────────────────────────────────────────────
-    col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
+    # Filters
+    col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
     with col_f1:
-        pet_options = ["All pets"] + [p.name for p in owner.owned_pets]
-        selected_pet_filter = st.selectbox("Filter by pet", pet_options, key="sched_pet_filter")
+        pet_opts = ["All pets"] + [p.name for p in owner.owned_pets]
+        pet_filter = st.selectbox("Pet", pet_opts, key="sf_pet")
     with col_f2:
-        status_filter = st.radio(
-            "Filter by status", ["All", "Pending", "Done"],
-            horizontal=True, key="sched_status_filter"
-        )
+        status_filter = st.radio("Status", ["All", "Pending", "Done"],
+                                 horizontal=True, key="sf_status")
     with col_f3:
-        freq_options = ["All"] + sorted({t.frequency for _, t in scheduler.get_todays_schedule()})
-        freq_filter = st.selectbox("Filter by frequency", freq_options, key="sched_freq_filter")
+        freq_opts = ["All"] + sorted({t.frequency for _, t in scheduler.get_todays_schedule()})
+        freq_filter = st.selectbox("Frequency", freq_opts, key="sf_freq")
+    with col_f4:
+        pri_opts = ["All", "🔴 High", "🟡 Medium", "🟢 Low"]
+        pri_filter = st.selectbox("Priority", pri_opts, key="sf_pri")
 
-    # ── Apply filters using Scheduler methods ─────────────────────────────────
-    if selected_pet_filter == "All pets":
-        view = scheduler.get_todays_schedule()
-    else:
-        view = scheduler.filter_by_pet(selected_pet_filter)
-
+    # Apply filters
+    view = scheduler.get_todays_schedule() if pet_filter == "All pets" else scheduler.filter_by_pet(pet_filter)
     if status_filter == "Pending":
         view = [(p, t) for p, t in view if not t.completed]
     elif status_filter == "Done":
         view = [(p, t) for p, t in view if t.completed]
-
     if freq_filter != "All":
         view = [(p, t) for p, t in view if t.frequency == freq_filter]
+    if pri_filter != "All":
+        pri_map = {"🔴 High": PRIORITY_HIGH, "🟡 Medium": PRIORITY_MEDIUM, "🟢 Low": PRIORITY_LOW}
+        view = [(p, t) for p, t in view if t.priority == pri_map[pri_filter]]
 
     st.divider()
 
-    # ── Schedule table ────────────────────────────────────────────────────────
     if not view:
         st.info("No tasks match the current filters.")
     else:
         # Column headers
-        hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1, 2, 2, 4, 2, 2])
-        hc1.caption("Done")
-        hc2.caption("Time")
-        hc3.caption("Pet")
-        hc4.caption("Task")
-        hc5.caption("Frequency")
-        hc6.caption("Due")
+        hc = st.columns([1, 1, 2, 2, 4, 2, 2])
+        for col, label in zip(hc, ["Done", "Pri", "Time", "Pet", "Task", "Freq", "Due"]):
+            col.caption(label)
         st.divider()
 
         for pet, task in view:
-            # Flag tasks that conflict at this time slot
-            is_conflicted = any(
-                (w.task_a is task or w.task_b is task) for w in conflicts
-            )
+            is_conflicted = any((w.task_a is task or w.task_b is task) for w in conflicts)
+            c_done, c_pri, c_time, c_pet, c_desc, c_freq, c_due = st.columns([1, 1, 2, 2, 4, 2, 2])
 
-            col_done, col_time, col_pet, col_desc, col_freq, col_due = st.columns([1, 2, 2, 4, 2, 2])
-
-            with col_done:
+            with c_done:
                 cb_key = f"cb_{pet.name}_{task.description}_{task.due_date}"
                 done = st.checkbox("", value=task.completed, key=cb_key)
                 if done and not task.completed:
                     scheduler.mark_task_complete(pet.name, task.description)
+                    owner.save_to_json(DATA_FILE)   # auto-save on completion
                     st.rerun()
 
-            with col_time:
+            with c_pri:
+                badge = PRIORITY_EMOJI.get(task.priority, "")
+                st.write(badge)
+
+            with c_time:
                 if is_conflicted:
                     st.markdown(f"**:orange[{task.time}]**")
                 else:
                     st.markdown(f"**{task.time}**")
 
-            with col_pet:
+            with c_pet:
                 st.write(pet.name)
 
-            with col_desc:
+            with c_desc:
                 if task.completed:
                     st.markdown(f"~~{task.description}~~")
                 elif is_conflicted:
                     st.markdown(f":orange[{task.description}] ⚠️")
+                elif task.priority == PRIORITY_HIGH:
+                    st.markdown(f"**{task.description}**")
                 else:
                     st.write(task.description)
 
-            with col_freq:
-                badge = {"daily": "🔁 daily", "weekly": "📆 weekly",
-                         "monthly": "🗓️ monthly", "once": "1️⃣ once"}.get(task.frequency, task.frequency)
-                st.caption(badge)
+            with c_freq:
+                freq_badge = {"daily": "🔁", "weekly": "📆",
+                              "monthly": "🗓️", "once": "1️⃣"}.get(task.frequency, "")
+                st.caption(f"{freq_badge} {task.frequency}")
 
-            with col_due:
+            with c_due:
                 if task.due_date == date.today():
                     st.caption("Today")
                 elif task.due_date > date.today():
@@ -161,15 +185,15 @@ with tab_schedule:
             for t in p.tasks:
                 if t.due_date == date.today():
                     t.reset()
+        owner.save_to_json(DATA_FILE)
         st.rerun()
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — My Pets
-# ═════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 with tab_pets:
     st.subheader("My Pets")
 
-    # ── Add pet form ──────────────────────────────────────────────────────────
     with st.form("add_pet_form", clear_on_submit=True):
         st.write("**Register a new pet**")
         c1, c2, c3 = st.columns(3)
@@ -187,47 +211,49 @@ with tab_pets:
                 st.error(f"'{pet_name}' is already registered.")
             else:
                 owner.add_pet(Pet(name=pet_name.strip(), species=species, age=age))
-                st.success(f"✅ {pet_name.strip()} added!")
-                st.rerun()
+                save()
 
     st.divider()
 
-    # ── Pet cards — metrics + filtered task list ──────────────────────────────
     if not owner.owned_pets:
-        st.info("No pets registered yet. Use the form above to add your first pet!")
+        st.info("No pets registered yet.")
     else:
         for pet in owner.owned_pets:
             pending = len(pet.get_pending_tasks())
             total = len(pet.tasks)
-            done = total - pending
+            high_count = sum(1 for t in pet.tasks if t.priority == PRIORITY_HIGH and not t.completed)
 
-            with st.expander(f"🐾 **{pet.name}** — {pet.species}, age {pet.age}", expanded=False):
+            header = f"🐾 **{pet.name}** — {pet.species}, age {pet.age}"
+            if high_count:
+                header += f"  🔴 ×{high_count}"
+
+            with st.expander(header, expanded=False):
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total tasks", total)
                 m2.metric("Pending", pending)
-                m3.metric("Done today", done)
+                m3.metric("High priority", high_count)
 
                 if not pet.tasks:
                     st.caption("No tasks assigned yet.")
                 else:
                     st.divider()
-                    for task in sorted(pet.tasks, key=lambda t: t.time):
+                    for task in sorted(pet.tasks, key=lambda t: (_PRIORITY_ORDER.get(t.priority, 1), t.time)):
+                        from pawpal_system import _PRIORITY_ORDER
                         status_icon = "✅" if task.completed else "⏳"
-                        freq_icon = {"daily": "🔁", "weekly": "📆",
-                                     "monthly": "🗓️", "once": "1️⃣"}.get(task.frequency, "")
+                        badge = PRIORITY_EMOJI.get(task.priority, "")
                         st.write(
-                            f"{status_icon} **{task.time}** — {task.description} "
-                            f"{freq_icon} _{task.frequency}_  `due {task.due_date}`"
+                            f"{status_icon} {badge} **{task.time}** — {task.description} "
+                            f"_{task.frequency}_  `due {task.due_date}`"
                         )
 
                 st.divider()
                 if st.button(f"🗑️ Remove {pet.name}", key=f"remove_{pet.name}"):
                     owner.remove_pet(pet.name)
-                    st.rerun()
+                    save()
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 3 — Add Task
-# ═════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 with tab_add_task:
     st.subheader("Schedule a New Task")
 
@@ -235,16 +261,21 @@ with tab_add_task:
         st.warning("Register at least one pet before scheduling tasks.")
     else:
         with st.form("add_task_form", clear_on_submit=True):
-            selected_pet_name = st.selectbox(
-                "Assign to pet", [p.name for p in owner.owned_pets]
-            )
-            c1, c2, c3 = st.columns(3)
+            selected_pet_name = st.selectbox("Assign to pet", [p.name for p in owner.owned_pets])
+            c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
             with c1:
                 description = st.text_input("Task description", placeholder="e.g. Morning walk")
             with c2:
                 time_str = st.time_input("Scheduled time")
             with c3:
                 frequency = st.selectbox("Frequency", ["daily", "weekly", "monthly", "once"])
+            with c4:
+                priority = st.selectbox(
+                    "Priority",
+                    [PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW],
+                    format_func=lambda p: f"{PRIORITY_EMOJI[p]} {p.capitalize()}",
+                    index=1
+                )
 
             if st.form_submit_button("Add Task"):
                 if not description.strip():
@@ -252,34 +283,80 @@ with tab_add_task:
                 else:
                     formatted_time = time_str.strftime("%H:%M")
                     target_pet = next(p for p in owner.owned_pets if p.name == selected_pet_name)
-
-                    # Preview conflict before adding
                     existing_times = {t.time for t in target_pet.tasks}
-                    will_conflict = formatted_time in existing_times
 
                     target_pet.add_task(Task(
                         description=description.strip(),
                         time=formatted_time,
-                        frequency=frequency
+                        frequency=frequency,
+                        priority=priority,
                     ))
+                    owner.save_to_json(DATA_FILE)
 
-                    if will_conflict:
+                    if formatted_time in existing_times:
                         st.warning(
-                            f"⚠️ Task added, but **{formatted_time}** already has "
-                            f"another task for {selected_pet_name}. Consider a different time."
+                            f"⚠️ Task added, but **{formatted_time}** already has another "
+                            f"task for {selected_pet_name}. Consider a different time."
                         )
                     else:
                         st.success(
-                            f"✅ '{description.strip()}' added to {selected_pet_name}'s "
-                            f"schedule at {formatted_time} ({frequency})."
+                            f"✅ {PRIORITY_EMOJI[priority]} '{description.strip()}' added to "
+                            f"{selected_pet_name}'s schedule at {formatted_time} ({frequency})."
                         )
                     st.rerun()
 
-        # ── Conflict summary for context while adding ─────────────────────────
         current_conflicts = scheduler.detect_conflicts()
         if current_conflicts:
             st.divider()
             st.subheader("Current Conflicts")
-            st.caption("Resolve these by rescheduling tasks in the My Pets tab.")
             for w in current_conflicts:
                 st.warning(w.message())
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — Slot Suggester (Challenge 1)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_suggest:
+    st.subheader("💡 Smart Slot Suggester")
+    st.caption(
+        "Find open time slots across all pets' schedules. "
+        "The algorithm scans from 06:00 in configurable increments, "
+        "skipping every slot that already has a task."
+    )
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        step = st.select_slider(
+            "Slot granularity (minutes)", options=[15, 30, 60], value=30
+        )
+    with col_b:
+        count = st.number_input("Number of suggestions", min_value=1, max_value=10, value=3)
+
+    if st.button("Find open slots"):
+        suggestions = scheduler.suggest_slots(count=count, step_minutes=step)
+        occupied = sorted({t.time for _, t in scheduler.get_todays_schedule()})
+
+        col_left, col_right = st.columns(2)
+        with col_left:
+            st.write("**Suggested free slots:**")
+            if suggestions:
+                for slot in suggestions:
+                    st.success(f"🕐 {slot} — available")
+            else:
+                st.warning("No free slots found with current settings.")
+
+        with col_right:
+            st.write("**Currently occupied slots:**")
+            if occupied:
+                for slot in occupied:
+                    st.error(f"🔒 {slot} — taken")
+            else:
+                st.info("No tasks scheduled yet — all slots are free!")
+
+    st.divider()
+    st.subheader("Next available slot after a specific time")
+    after_time = st.time_input("Find first free slot after:", key="suggest_after")
+    if st.button("Find next slot"):
+        next_slot = scheduler.next_available_slot(
+            after=after_time.strftime("%H:%M"), step_minutes=step
+        )
+        st.success(f"Next available slot: **{next_slot}**")
