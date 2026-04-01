@@ -6,6 +6,7 @@ from datetime import date
 from pawpal_system import (
     Task, Pet, Owner, Scheduler,
     PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW, PRIORITY_EMOJI,
+    _PRIORITY_ORDER,
 )
 
 DATA_FILE = "data.json"
@@ -238,7 +239,6 @@ with tab_pets:
                 else:
                     st.divider()
                     for task in sorted(pet.tasks, key=lambda t: (_PRIORITY_ORDER.get(t.priority, 1), t.time)):
-                        from pawpal_system import _PRIORITY_ORDER
                         status_icon = "✅" if task.completed else "⏳"
                         badge = PRIORITY_EMOJI.get(task.priority, "")
                         st.write(
