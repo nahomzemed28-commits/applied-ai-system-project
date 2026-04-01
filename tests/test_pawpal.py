@@ -179,3 +179,91 @@ def test_once_task_does_not_recur():
     scheduler = _make_scheduler(pet)
     scheduler.mark_task_complete("Buddy", "Vet visit")
     assert len(pet.tasks) == 1
+
+
+# ── Edge case tests ──────────────────────────────────────────────────────────
+
+def test_pet_with_no_tasks_returns_empty_schedule():
+    """A pet with no tasks should produce an empty schedule without errors."""
+    pet = Pet("Empty", "Dog", 2)
+    scheduler = _make_scheduler(pet)
+    assert scheduler.get_todays_schedule() == []
+
+
+def test_owner_with_no_pets_returns_empty_schedule():
+    """An owner with no pets should produce an empty schedule without errors."""
+    scheduler = _make_scheduler()  # no pets
+    assert scheduler.get_todays_schedule() == []
+    assert scheduler.get_pending_tasks() == []
+    assert scheduler.detect_conflicts() == []
+
+
+def test_mark_task_complete_unknown_pet_returns_false():
+    """mark_task_complete() should return False when the pet name doesn't exist."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Walk", "07:00", "daily"))
+    scheduler = _make_scheduler(pet)
+    result = scheduler.mark_task_complete("Ghost", "Walk")
+    assert result is False
+
+
+def test_mark_task_complete_unknown_task_returns_false():
+    """mark_task_complete() should return False when the task description doesn't match."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Walk", "07:00", "daily"))
+    scheduler = _make_scheduler(pet)
+    result = scheduler.mark_task_complete("Buddy", "Nonexistent task")
+    assert result is False
+
+
+def test_conflict_warning_message_is_readable():
+    """ConflictWarning.message() should return a non-empty human-readable string."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Feeding", "08:00", "daily"))
+    pet.add_task(Task("Meds", "08:00", "daily"))
+    scheduler = _make_scheduler(pet)
+    conflicts = scheduler.detect_conflicts()
+    assert len(conflicts) == 1
+    msg = conflicts[0].message()
+    assert "08:00" in msg
+    assert "Feeding" in msg
+    assert "Meds" in msg
+
+
+def test_filter_by_pet_case_insensitive():
+    """filter_by_pet() should match pet names regardless of case."""
+    pet = Pet("Luna", "Dog", 3)
+    pet.add_task(Task("Walk", "07:00", "daily"))
+    scheduler = _make_scheduler(pet)
+    assert len(scheduler.filter_by_pet("luna")) == 1
+    assert len(scheduler.filter_by_pet("LUNA")) == 1
+
+
+def test_all_tasks_complete_leaves_no_pending():
+    """After completing every task, get_pending_tasks() should return an empty list."""
+    pet = Pet("Buddy", "Dog", 1)
+    pet.add_task(Task("Walk", "07:00", "once"))
+    pet.add_task(Task("Feeding", "08:00", "once"))
+    scheduler = _make_scheduler(pet)
+    scheduler.mark_task_complete("Buddy", "Walk")
+    scheduler.mark_task_complete("Buddy", "Feeding")
+    assert scheduler.get_pending_tasks() == []
+
+
+def test_next_occurrence_preserves_description_and_time():
+    """next_occurrence() should copy the description and time from the original task."""
+    task = Task("Morning walk", "07:30", "daily")
+    next_task = task.next_occurrence()
+    assert next_task.description == "Morning walk"
+    assert next_task.time == "07:30"
+    assert next_task.frequency == "daily"
+
+
+def test_remove_task_from_pet():
+    """remove_task() should delete the matching task and leave others intact."""
+    pet = Pet("Luna", "Dog", 3)
+    pet.add_task(Task("Walk", "07:00", "daily"))
+    pet.add_task(Task("Feeding", "08:00", "daily"))
+    pet.remove_task("Walk")
+    assert len(pet.tasks) == 1
+    assert pet.tasks[0].description == "Feeding"

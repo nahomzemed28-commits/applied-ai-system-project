@@ -67,6 +67,30 @@ PawPal+ includes algorithmic intelligence built into the `Scheduler` class:
 - Create modern web dashboard
 - Connect to backend logic
 
+## Testing PawPal+
+
+Run the full test suite with:
+
+```bash
+python -m pytest
+```
+
+**What the tests cover (25 tests, all passing):**
+
+| Category | Tests | What's verified |
+|---|---|---|
+| Task basics | 5 | Default status, `mark_complete()`, `reset()`, `next_occurrence()` for daily/weekly/once |
+| Pet management | 3 | Task count grows on `add_task()`, pending filter excludes completed, `remove_task()` |
+| Sorting | 1 | Tasks added out of order are returned chronologically |
+| Filtering | 3 | Filter by pet (case-insensitive), by status, by frequency |
+| Conflict detection | 3 | Same-time tasks flagged, no false positives, warning message is human-readable |
+| Recurring tasks | 3 | Daily appends next-day task, weekly appends +7 days, `once` does not recur |
+| Edge cases | 7 | Empty pet, owner with no pets, unknown pet/task lookup returns False, all tasks complete = no pending |
+
+**Confidence Level: ★★★★☆ (4/5)**
+
+The core scheduling logic — sorting, filtering, conflict detection, and recurrence — is well covered. One-star deducted because task durations are not modeled, so overlapping-but-not-exact-time conflicts are not detected or tested.
+
 ## Installation
 
 ```bash
