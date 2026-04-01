@@ -98,8 +98,9 @@ class Pet:
         self.tasks = [t for t in self.tasks if t.description != description]
 
     def get_pending_tasks(self) -> list[Task]:
-        """Return all incomplete tasks for this pet."""
-        return [t for t in self.tasks if not t.completed]
+        """Return incomplete tasks due today or overdue (excludes future recurring copies)."""
+        today = date.today()
+        return [t for t in self.tasks if not t.completed and t.due_date <= today]
 
     def to_dict(self) -> dict:
         """Serialize this Pet to a JSON-compatible dictionary."""
