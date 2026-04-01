@@ -221,16 +221,16 @@ class Scheduler:
     # ── Sorting ───────────────────────────────────────────────────────────────
 
     def get_todays_schedule(self) -> list[tuple[Pet, Task]]:
-        """Return all tasks sorted first by priority (high→low), then chronologically by time.
+        """Return tasks due today or overdue, sorted by priority (high→low) then time.
 
-        Challenge 3 — Priority-Based Scheduling:
-        The sort key is a tuple (priority_rank, time_string). Python compares tuples
-        element-by-element, so high-priority tasks always float above lower-priority ones
-        that share the same time slot, without any explicit if-else logic.
+        Future recurring tasks (due_date > today) are excluded — they belong to a future
+        schedule and would appear as duplicates of their just-completed predecessors.
         """
+        today = date.today()
         all_tasks = self.owner.get_all_tasks()
+        due_tasks = [(pet, task) for pet, task in all_tasks if task.due_date <= today]
         return sorted(
-            all_tasks,
+            due_tasks,
             key=lambda pair: (_PRIORITY_ORDER.get(pair[1].priority, 1), pair[1].time)
         )
 
