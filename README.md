@@ -1,101 +1,129 @@
 # PawPal+ 🐾
 
-A smart pet care management system that helps owners keep their furry friends happy and healthy.
+A smart pet care management system built with Python and Streamlit. PawPal+ helps pet owners schedule, track, and organize their pets' daily care routines — with intelligent sorting, filtering, recurring task automation, and conflict detection.
 
-## Overview
+---
 
-PawPal+ is an intelligent pet care management application designed to help pet owners manage daily routines including:
-- **Feedings** - Track and schedule regular meal times for each pet
-- **Walks** - Log exercise and outdoor time
-- **Medications** - Set reminders for vital medication schedules
-- **Appointments** - Manage vet visits and grooming appointments
+## 📸 Demo
 
-The system uses algorithmic logic to organize and prioritize tasks, helping owners stay on top of their pets' care needs.
+<!-- Replace the path below with your actual screenshot once captured -->
+<a href="/course_images/ai110/pawpal_screenshot.png" target="_blank">
+  <img src='/course_images/ai110/pawpal_screenshot.png' title='PawPal+ App' width='' alt='PawPal App' class='center-block' />
+</a>
 
-## Key Features
+---
 
-- Track multiple pets and their individual care requirements
-- Organize daily tasks with intelligent scheduling
-- Detect scheduling conflicts
-- Manage recurring vs. one-time tasks
-- View today's tasks prioritized by importance
+## Features
 
-## Technology Stack
+### Core Management
+- **Multiple pets** — Register and manage any number of pets, each with their own profile (name, species, age) and independent task list
+- **Flexible tasks** — Each task stores a description, scheduled time (`HH:MM`), frequency, due date, and completion status
 
-- **Backend**: Python with Object-Oriented Programming (OOP)
-- **UI**: Streamlit (modern web dashboard)
-- **Testing**: pytest for automated test suites
+### Algorithmic Intelligence (Scheduler class)
+- **Chronological sorting** — `get_todays_schedule()` uses Python's `sorted()` with a `lambda` key on the `HH:MM` time string; tasks added in any order always display correctly
+- **Multi-axis filtering** — Filter the schedule by pet name (`filter_by_pet()`), completion status (`filter_by_status()`), or recurrence frequency (`filter_by_frequency()`); filters compose and return sorted results
+- **Recurring task automation** — Completing a `daily`, `weekly`, or `monthly` task via `mark_task_complete()` automatically appends the next occurrence using Python's `timedelta`; `once` tasks do not recur
+- **Conflict detection** — `detect_conflicts()` groups tasks by time slot using a `defaultdict` and returns typed `ConflictWarning` objects with human-readable `.message()` strings — warns without crashing
+
+### Streamlit UI
+- **Live filter controls** — Pet dropdown, status radio, and frequency selector dynamically filter the schedule table
+- **Inline conflict highlighting** — Conflicting rows appear in orange with ⚠️; an expandable conflict panel shows one warning per clash
+- **Pre-flight conflict check** — When adding a new task, the UI warns immediately if the chosen time already has a task for that pet
+- **Per-pet metrics** — Each pet card shows Total / Pending / Done counts at a glance
+- **Live sidebar stats** — Pets, total tasks, pending count, and a green/red conflict indicator update on every interaction
+
+---
+
+## System Architecture
+
+See [uml_final.md](uml_final.md) for the complete Mermaid.js class diagram.
+
+**Five classes, one clear hierarchy:**
+
+```
+Owner ──owns──▶ Pet ──has──▶ Task ──next_occurrence()──▶ Task
+  ▲
+  └── Scheduler (reads Owner, produces ConflictWarning)
+```
+
+---
 
 ## Project Structure
 
 ```
 PawPal/
-├── pawpal_system.py      # Core business logic and classes
-├── demo.py              # CLI demo script for testing backend
-├── test_pawpal.py       # Automated test suite
+├── pawpal_system.py      # Core business logic (Task, Pet, Owner, Scheduler, ConflictWarning)
+├── app.py               # Streamlit web dashboard
+├── main.py              # CLI demo script — run to verify backend in terminal
+├── tests/
+│   └── test_pawpal.py   # 25 automated pytest tests
+├── uml_final.md         # Final Mermaid.js UML class diagram
 ├── requirements.txt     # Python dependencies
-├── README.md           # This file
-└── reflection.md       # Design reflection and learnings
+├── reflection.md        # Design reflection and AI collaboration notes
+└── README.md            # This file
 ```
+
+---
 
 ## Smarter Scheduling
 
-PawPal+ includes algorithmic intelligence built into the `Scheduler` class:
+| Algorithm | Method | Complexity |
+|---|---|---|
+| Chronological sort | `get_todays_schedule()` | O(n log n) |
+| Filter by pet | `filter_by_pet(name)` | O(n) |
+| Filter by status | `filter_by_status(completed)` | O(n) |
+| Filter by frequency | `filter_by_frequency(freq)` | O(n) |
+| Conflict detection | `detect_conflicts()` | O(n) grouping + O(k²) per slot |
+| Recurring scheduling | `mark_task_complete()` + `next_occurrence()` | O(1) per task |
 
-- **Sorting** — `get_todays_schedule()` sorts all tasks chronologically using Python's `sorted()` with a `lambda` key on the `"HH:MM"` time string. Tasks can be added in any order and will always display correctly.
-- **Filtering** — Tasks can be filtered by pet name (`filter_by_pet()`), completion status (`filter_by_status()`), or recurrence frequency (`filter_by_frequency()`), all returning sorted results.
-- **Recurring tasks** — Completing a `daily`, `weekly`, or `monthly` task via `mark_task_complete()` automatically appends the next occurrence using Python's `timedelta`. `once` tasks do not recur.
-- **Conflict detection** — `detect_conflicts()` groups tasks by time slot and returns `ConflictWarning` objects for any slot with more than one task. It returns warnings instead of raising exceptions, so the app never crashes on scheduling issues.
+**Known tradeoff:** Conflict detection matches exact `HH:MM` slots only. Tasks with overlapping durations at different start times are not flagged. See [reflection.md](reflection.md) section 2b for full analysis.
 
-## Getting Started
-
-### Phase 1: System Design with UML + AI Support
-- Design modular system architecture using OOP
-- Create UML diagrams to visualize relationships
-- Implement class skeletons
-
-### Phase 2: Core Logic Implementation
-- Build scheduling algorithms
-- Implement conflict detection
-- Handle recurring tasks
-
-### Phase 3: CLI Verification
-- Create demo script to test system behavior
-- Write pytest test suites
-
-### Phase 4: Streamlit UI
-- Create modern web dashboard
-- Connect to backend logic
+---
 
 ## Testing PawPal+
 
-Run the full test suite with:
+Run the full test suite:
 
 ```bash
 python -m pytest
 ```
 
-**What the tests cover (25 tests, all passing):**
+**Coverage (25 tests, all passing):**
 
-| Category | Tests | What's verified |
+| Category | Count | What's verified |
 |---|---|---|
 | Task basics | 5 | Default status, `mark_complete()`, `reset()`, `next_occurrence()` for daily/weekly/once |
-| Pet management | 3 | Task count grows on `add_task()`, pending filter excludes completed, `remove_task()` |
-| Sorting | 1 | Tasks added out of order are returned chronologically |
-| Filtering | 3 | Filter by pet (case-insensitive), by status, by frequency |
-| Conflict detection | 3 | Same-time tasks flagged, no false positives, warning message is human-readable |
-| Recurring tasks | 3 | Daily appends next-day task, weekly appends +7 days, `once` does not recur |
-| Edge cases | 7 | Empty pet, owner with no pets, unknown pet/task lookup returns False, all tasks complete = no pending |
+| Pet management | 3 | Task count grows, pending filter excludes completed, `remove_task()` |
+| Sorting | 1 | Out-of-order tasks return chronologically |
+| Filtering | 3 | Filter by pet (case-insensitive), status, frequency |
+| Conflict detection | 3 | Same-time tasks flagged, no false positives, warning message readable |
+| Recurring tasks | 3 | Daily → +1 day, weekly → +7 days, `once` → no recurrence |
+| Edge cases | 7 | Empty pet, no-pet owner, unknown lookups return False, case-insensitive pet match |
 
-**Confidence Level: ★★★★☆ (4/5)**
+**Confidence Level: ★★★★☆ (4/5)** — Core logic fully covered; duration-based overlap detection is the known untested gap.
 
-The core scheduling logic — sorting, filtering, conflict detection, and recurrence — is well covered. One-star deducted because task durations are not modeled, so overlapping-but-not-exact-time conflicts are not detected or tested.
+---
 
 ## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
+
+## Running the App
+
+```bash
+# Launch Streamlit UI
+streamlit run app.py
+
+# Verify backend logic in terminal
+python3 main.py
+
+# Run tests
+python -m pytest
+```
+
+---
 
 ## License
 
