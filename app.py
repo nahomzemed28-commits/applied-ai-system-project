@@ -1,7 +1,11 @@
-"""PawPal+ Streamlit UI — priority scheduling, JSON persistence, smart slot suggestions."""
+"""PawPal+ Streamlit UI — priority scheduling, JSON persistence, smart slot suggestions, RAG AI."""
 
+import os
 import streamlit as st
 from datetime import date
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from pawpal_system import (
     Task, Pet, Owner, Scheduler,
@@ -74,8 +78,8 @@ with st.expander("Priority legend", expanded=False):
     col3.markdown(f"{PRIORITY_EMOJI[PRIORITY_LOW]} **Low** — optional / enrichment (playtime, grooming)")
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_schedule, tab_pets, tab_add_task, tab_suggest = st.tabs([
-    "📅 Today's Schedule", "🐶 My Pets", "➕ Add Task", "💡 Slot Suggester"
+tab_schedule, tab_pets, tab_add_task, tab_suggest, tab_ai = st.tabs([
+    "📅 Today's Schedule", "🐶 My Pets", "➕ Add Task", "💡 Slot Suggester", "🤖 Ask PawPal AI"
 ])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -361,3 +365,79 @@ with tab_suggest:
             after=after_time.strftime("%H:%M"), step_minutes=step
         )
         st.success(f"Next available slot: **{next_slot}**")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 5 — Ask PawPal AI (RAG)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_ai:
+    st.subheader("🤖 Ask PawPal AI")
+    st.caption(
+        "Ask any pet care question. The AI retrieves relevant passages from a curated knowledge "
+        "base before answering — so responses are grounded, not guessed."
+    )
+
+    # Lazy-load the assistant once per session
+    if "ai_assistant" not in st.session_state:
+        from ai_assistant import PetCareAssistant
+        st.session_state.ai_assistant = PetCareAssistant()
+
+    ai = st.session_state.ai_assistant
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.warning(
+            "ANTHROPIC_API_KEY not set. Set it in your environment or a .env file, "
+            "then restart the app. Guardrail and retrieval tests still work without it."
+        )
+
+    with st.form("ai_form", clear_on_submit=False):
+        query = st.text_area(
+            "Your question",
+            placeholder="e.g. How often should I feed my adult dog?",
+            height=80,
+        )
+        submitted = st.form_submit_button("Ask", use_container_width=True)
+
+    if submitted and query.strip():
+        with st.spinner("Retrieving knowledge and generating answer..."):
+            result = ai.answer(query)
+
+        if result["blocked"]:
+            st.warning(result["answer"])
+        elif result["error"]:
+            st.error(f"AI service error: {result['error']}")
+            st.info("Check that your ANTHROPIC_API_KEY is valid and try again.")
+        else:
+            # Confidence badge
+            conf_colors = {"high": "green", "medium": "orange", "low": "red"}
+            conf_label = result["confidence_label"]
+            conf_score = result["confidence"]
+            st.markdown(
+                f"**Confidence:** :{conf_colors.get(conf_label, 'gray')}[{conf_label.upper()} "
+                f"({conf_score:.2f})]"
+            )
+
+            st.divider()
+            st.markdown(result["answer"])
+
+            if result["sources"]:
+                with st.expander("Sources retrieved from knowledge base", expanded=False):
+                    for src in result["sources"]:
+                        st.caption(f"• `{src}`")
+
+            if conf_label == "low":
+                st.info(
+                    "Low retrieval confidence — the knowledge base may not fully cover this topic. "
+                    "Consult your vet for authoritative advice."
+                )
+
+    # Query history from the log file
+    with st.expander("Recent query log (last 10 entries)", expanded=False):
+        log_path = ai.LOG_DIR / "ai_queries.log" if hasattr(ai, "LOG_DIR") else None
+        from ai_assistant import LOG_DIR as _log_dir
+        log_file = _log_dir / "ai_queries.log"
+        if log_file.exists():
+            lines = log_file.read_text().strip().splitlines()
+            for line in lines[-10:]:
+                st.caption(line)
+        else:
+            st.caption("No queries logged yet.")

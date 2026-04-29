@@ -1,0 +1,92 @@
+[
+  {
+    "id": "feeding-dogs-adult",
+    "topic": "feeding",
+    "text": "Adult dogs generally do best with two meals per day, spaced 8-12 hours apart. A morning feeding around 7:00 AM and an evening feeding around 6:00 PM is a common routine. Portion size depends on the dog's weight, breed, and activity level — check the feeding guide on the food packaging and adjust based on body condition score."
+  },
+  {
+    "id": "feeding-dogs-puppies",
+    "topic": "feeding",
+    "text": "Puppies under 6 months need 3-4 meals per day because their stomachs are small and blood sugar can drop quickly. Between 6 and 12 months, most puppies transition to 2-3 meals per day. Puppy food has higher protein and calorie density than adult food — do not switch to adult food before your vet recommends it."
+  },
+  {
+    "id": "obesity-risks-dogs",
+    "topic": "feeding",
+    "text": "Free-feeding (leaving food out all day) can lead to obesity in most dog breeds. Obesity in dogs increases the risk of joint disease, diabetes, heart disease, and shortened lifespan. Monitor your dog's weight monthly and adjust portion sizes if ribs are no longer easily felt under a thin layer of fat."
+  },
+  {
+    "id": "feeding-cats-adult",
+    "topic": "feeding",
+    "text": "Adult cats can be fed 2 meals per day or allowed to free-feed with measured portions. Most vets recommend scheduled feeding rather than free-feeding to prevent obesity. Wet food provides extra hydration, which is especially important for cats prone to urinary tract issues. Dry food alone is acceptable if the cat drinks sufficient water."
+  },
+  {
+    "id": "cat-toxins-nsaids",
+    "topic": "medications",
+    "text": "NSAIDs such as ibuprofen, aspirin, and naproxen are toxic to cats and can cause acute kidney failure even in very small doses. Never give human pain medication to cats. Even a single regular-strength ibuprofen tablet can be fatal. If your cat ingests any human NSAID, contact your vet or an animal poison control hotline immediately."
+  },
+  {
+    "id": "dog-toxins-common",
+    "topic": "medications",
+    "text": "Common household toxins for dogs include chocolate, xylitol (found in sugar-free gum and some peanut butters), grapes and raisins, onions and garlic, macadamia nuts, and caffeine. Symptoms of poisoning include vomiting, diarrhea, tremors, and lethargy. If you suspect poisoning, call your vet or ASPCA Animal Poison Control (888-426-4435) immediately."
+  },
+  {
+    "id": "vet-only-medications",
+    "topic": "medications",
+    "text": "Never give human pain medications to pets without explicit veterinary instruction. Safe feline pain options include buprenorphine and meloxicam at vet-prescribed doses. Safe canine pain options include carprofen, meloxicam, and deracoxib — all require a prescription. Acetaminophen (Tylenol) is toxic to both cats and dogs."
+  },
+  {
+    "id": "appetite-loss-dogs",
+    "topic": "health",
+    "text": "A dog skipping one meal occasionally is not usually an emergency for an otherwise healthy adult. Stress, heat, or minor stomach upset can cause a single skipped meal. Skipping two or more consecutive meals warrants a vet call. Appetite loss combined with lethargy, vomiting, or diarrhea is a red flag requiring prompt veterinary attention."
+  },
+  {
+    "id": "appetite-loss-cats",
+    "topic": "health",
+    "text": "Cats should not go more than 24-48 hours without eating. Prolonged appetite loss in cats can cause hepatic lipidosis (fatty liver disease), a serious condition that develops quickly in cats. If your cat has not eaten for more than 24 hours, contact your vet. Any weight loss greater than 10% of body weight in a short period is an emergency."
+  },
+  {
+    "id": "emergency-symptoms-pets",
+    "topic": "health",
+    "text": "Emergency symptoms requiring immediate veterinary care include: difficulty breathing, pale or blue gums, collapse or inability to stand, seizures, suspected poisoning, bloated or distended abdomen, uncontrolled bleeding, loss of consciousness, or repeated vomiting and diarrhea lasting more than 24 hours. Do not wait — go directly to an emergency vet."
+  },
+  {
+    "id": "dog-exercise-adult",
+    "topic": "exercise",
+    "text": "Most adult dogs need 30-60 minutes of exercise per day, split across at least two walks. High-energy breeds (Border Collies, Huskies, Retrievers) need 90 minutes or more. Low-energy breeds (Bulldogs, Basset Hounds) may be satisfied with 20-30 minutes. Signs of under-exercise include destructive behavior, excessive barking, and restlessness."
+  },
+  {
+    "id": "cat-exercise",
+    "topic": "exercise",
+    "text": "Indoor cats need at least 10-15 minutes of active play per day to maintain a healthy weight and prevent boredom. Interactive toys (feather wands, laser pointers, puzzle feeders) are more effective than leaving a static toy on the floor. Two play sessions of 5-10 minutes each are ideal. Cats that do not play enough may become obese or develop behavioral issues."
+  },
+  {
+    "id": "dog-grooming-frequency",
+    "topic": "grooming",
+    "text": "Grooming frequency depends on coat type. Short-coated dogs need brushing once a week and bathing every 4-6 weeks. Medium and long-coated dogs should be brushed 2-3 times per week and bathed every 4-6 weeks. Double-coated breeds need daily brushing during shedding season. Nails should be trimmed every 3-4 weeks to prevent overgrowth and discomfort."
+  },
+  {
+    "id": "cat-grooming-frequency",
+    "topic": "grooming",
+    "text": "Short-haired cats groom themselves effectively and typically only need weekly brushing to reduce shedding. Long-haired cats (Persians, Maine Coons) require daily brushing to prevent matting. Most cats do not need baths unless they get into something messy. Nails should be trimmed every 2-3 weeks. Check ears monthly for wax buildup or signs of infection."
+  },
+  {
+    "id": "dental-care-pets",
+    "topic": "health",
+    "text": "Dental disease is the most common health problem in adult pets. Daily tooth brushing with pet-safe toothpaste is the gold standard for prevention. Dental chews and water additives are helpful supplements but do not replace brushing. Signs of dental disease include bad breath, drooling, difficulty chewing, and pawing at the mouth. Annual professional cleanings are recommended by most vets."
+  },
+  {
+    "id": "hydration-pets",
+    "topic": "health",
+    "text": "Dogs should drink approximately 1 ounce of water per pound of body weight per day. Cats are naturally low-thirst animals but should drink about 3.5-4.5 ounces of water per 5 pounds of body weight daily. Signs of dehydration include skin tenting (skin does not snap back quickly when pinched), dry or sticky gums, and lethargy. Always provide fresh, clean water."
+  },
+  {
+    "id": "vaccine-schedule-dogs",
+    "topic": "health",
+    "text": "Core vaccines for dogs include distemper, parvovirus, adenovirus, and rabies. Puppies receive a series of vaccines every 3-4 weeks until 16 weeks of age, then a booster at 1 year, and then every 1-3 years. Rabies vaccination is legally required in most US states. Non-core vaccines (Bordetella, Leptospirosis, Lyme) depend on the dog's lifestyle and region."
+  },
+  {
+    "id": "vaccine-schedule-cats",
+    "topic": "health",
+    "text": "Core vaccines for cats include feline herpesvirus, calicivirus, panleukopenia (FVRCP), and rabies. Kittens receive boosters every 3-4 weeks until 16 weeks, then a booster at 1 year, followed by every 1-3 years. Indoor cats still require core vaccines. Discuss FeLV (feline leukemia) vaccination with your vet if your cat goes outdoors."
+  }
+]
