@@ -4,6 +4,24 @@
 
 ---
 
+## Demo Walkthrough
+
+**Video walkthrough (Loom):** [INSERT LOOM LINK HERE]
+
+**App screenshot:**
+
+![PawPal+ AI — Ask PawPal AI tab](assets/pawpal_ai_screenshot.png)
+
+> The "Ask PawPal AI" tab showing a question, confidence badge, generated answer, and source citations from the knowledge base.
+
+**System architecture diagram:**
+
+![System Architecture Diagram](assets/system_diagram.png)
+
+> Full data-flow diagram. See [assets/system_diagram.md](assets/system_diagram.md) for the editable Mermaid source.
+
+---
+
 ## Original Project (Modules 1–3)
 
 **PawPal+** was built during Modules 1–3 as a smart pet care scheduling system. Its original goals were to let pet owners register multiple pets, assign recurring or one-time care tasks (walks, feedings, medications), and track completions — with algorithmic intelligence for chronological sorting, multi-axis filtering, conflict detection, and automatic next-occurrence scheduling for repeating tasks. The system was built entirely in Python with a Streamlit frontend and had no AI component.
@@ -287,19 +305,36 @@ applied-ai-system-project/
 ├── integration_check.py            # End-to-end smoke test for the full stack
 ├── ui_behavior_test.py             # Streamlit UI behavior tests
 ├── knowledge_base/
-│   └── pet_care_facts.json         # Curated pet care knowledge base (chunk format)
+│   └── pet_care_facts.json         # Curated pet care knowledge base (18 chunks)
 ├── logs/
 │   └── ai_queries.log              # Timestamped log of every AI query and response
 ├── tests/
-│   └── test_pawpal.py              # 38 pytest unit and integration tests
+│   ├── test_pawpal.py              # 38 core logic pytest tests
+│   └── test_ai_assistant.py        # 8 AI assistant pytest tests (mock API)
 ├── assets/
-│   ├── system_diagram.md           # Mermaid.js system architecture diagram
-│   └── pawpal_screenshot.png       # App screenshot (add after first run)
+│   ├── system_diagram.md           # Mermaid.js source (editable)
+│   ├── system_diagram.png          # Exported architecture diagram image
+│   └── pawpal_ai_screenshot.png    # App screenshot
 ├── data.json                       # Persisted owner/pet/task data (auto-generated)
+├── pytest.ini                      # Scopes test discovery to tests/
 ├── requirements.txt                # Python dependencies
-├── reflection.md                   # Full design reflection (Modules 1–3)
+├── model_card.md                   # Model card: biases, testing, AI collaboration
+├── ethics_reflection.md            # Extended ethics and responsibility reflection
+├── reflection.md                   # Original design reflection (Modules 1–3)
 └── uml_final.md                    # Mermaid.js UML class diagram
 ```
+
+---
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| [model_card.md](model_card.md) | Model card — biases, limitations, testing results, AI collaboration |
+| [ethics_reflection.md](ethics_reflection.md) | Extended ethics and responsibility reflection |
+| [reflection.md](reflection.md) | Original design reflection from Modules 1–3 |
+| [uml_final.md](uml_final.md) | Mermaid.js UML class diagram |
+| [assets/system_diagram.md](assets/system_diagram.md) | Mermaid.js system architecture source |
 
 ---
 
